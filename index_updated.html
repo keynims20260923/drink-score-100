@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#111827">
+<title>飲酒スコア 100</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f3f4f6;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif}
+main{max-width:520px;margin:auto;padding:20px 16px 40px}
+h1{font-size:24px;margin:6px 0 18px}
+.card{background:white;border-radius:20px;padding:20px;margin-bottom:14px;box-shadow:0 3px 14px #0000000d}
+.score{text-align:center}
+.score-num{font-size:54px;font-weight:800;line-height:1}
+.score-num span{font-size:22px;font-weight:500;color:#6b7280}
+.bar{height:14px;background:#e5e7eb;border-radius:99px;overflow:hidden;margin:18px 0 8px}
+.fill{height:100%;width:0;background:#111827;border-radius:99px;transition:.25s}
+.status{text-align:center;font-weight:700}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+button{border:0;border-radius:15px;background:#eef2ff;padding:15px 10px;font-size:16px;font-weight:700;color:#111827}
+button:active{transform:scale(.98)}
+button.water{background:#e0f2fe}
+button.reset{background:#fee2e2;width:100%;margin-top:8px}
+.drink{display:flex;justify-content:space-between;align-items:center}
+.history{margin:0;padding:0;list-style:none}
+.history li{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid #eee}
+.history li:last-child{border-bottom:0}
+.small{font-size:13px;color:#6b7280}
+.warning{display:none;background:#dc2626;color:white;border-radius:16px;padding:18px 12px;margin-top:12px;font-weight:800;font-size:20px;line-height:1.4;box-shadow:0 4px 12px #0003}.danger .score-num{color:#dc2626}.danger .fill{background:#dc2626!important}.water-count{margin-top:12px;font-size:18px;font-weight:800;background:#e0f2fe;padding:10px;border-radius:12px}
+.limit{color:#b91c1c}
+.settings{font-size:14px}
+.settings input{width:64px;padding:8px;border:1px solid #d1d5db;border-radius:8px;text-align:center}
+.row{display:flex;justify-content:space-between;align-items:center;padding:8px 0}
+</style>
+</head>
+<body>
+<main>
+<h1>🍺 飲酒スコア 100</h1>
+
+<section class="card score">
+  <div class="small">今日のスコア</div>
+  <div class="score-num" id="score">0<span> / 100</span></div>
+  <div class="water-count" id="waterCount">💧 水 0杯</div>
+  <div class="bar"><div class="fill" id="fill"></div></div>
+  <div class="status" id="status">まだ余裕あり</div>
+  <div class="warning" id="warning">⚠️ 飲酒スコアが100点を超えています<br>これ以上飲まず、今日は終了。</div>
+</section>
+
+<section class="card">
+  <div class="small" style="margin-bottom:10px">飲んだらタップ</div>
+  <div class="grid" id="buttons"></div>
+  <button class="water" style="width:100%;margin-top:10px;font-size:19px" onclick="addWater()">💧 水を飲んだ！　−5点　＋1杯</button>
+</section>
+
+<section class="card">
+  <div class="drink"><b>今日の履歴</b><span class="small" id="count">0杯</span></div>
+  <ul class="history" id="history"></ul>
+  <button class="reset" onclick="resetDay()">今日の記録をリセット</button>
+<button class="reset" style="background:#e5e7eb;color:#374151" onclick="clearAll()">すべての履歴を削除</button>
+<div class="small" style="margin-top:10px">※水の−5点は飲酒管理のための個人的なルールです。水がアルコールを打ち消すものではありません。</div>
+</section>
+
+<section class="card settings">
+  <b>⚙️ 点数設定</b>
+  <div id="settings"></div>
+</section>
+</main>
+
+<script>
+const defaults=[
+ ["ワイン",25],["ウイスキーロック",25],["日本酒",20],
+ ["ビール",15],["ハイボール",15],["サワー",10],["梅酒ロック",10]
+];
+
+let drinks=JSON.parse(localStorage.getItem("drinkSettings")||"null")||defaults;
+let state=JSON.parse(localStorage.getItem("drinkState")||"null")||{history:[]};
+state.history=state.history||[];
+
+/* 以前のデータ（dateがない履歴）は、今日の記録として扱います */
+const todayKey=()=>new Date().toLocaleDateString("ja-JP");
+state.history.forEach(x=>{
+  if(!x.date) x.date=todayKey();
+  if(!x.time) x.time="";
+  if(x.points===undefined) x.points=0;
+});
+
+function save(){
+  localStorage.setItem("drinkState",JSON.stringify(state));
+  localStorage.setItem("drinkSettings",JSON.stringify(drinks));
+}
+
+function dailyEntries(date){
+  return state.history.filter(x=>x.date===date);
+}
+
+function dailyScore(date){
+  return dailyEntries(date).reduce((sum,x)=>sum+Number(x.points||0),0);
+}
+
+function render(){
+  const today=todayKey();
+  const score=dailyScore(today);
+  const todayHistory=dailyEntries(today);
+
+  document.getElementById("score").innerHTML=`${score}<span> / 100</span>`;
+  document.getElementById("fill").style.width=Math.min(Math.max(score,0),100)+"%";
+  document.getElementById("fill").style.background=score>=100?"#b91c1c":"#111827";
+
+  let status=score>=100?"今日は終了":score>=80?"そろそろ終了":score>=60?"水をはさもう":"まだ余裕あり";
+  document.getElementById("status").textContent=status;
+  document.getElementById("status").className="status "+(score>=80?"limit":"");
+  document.getElementById("warning").style.display=score>=100?"block":"none";
+  document.querySelector(".score").classList.toggle("danger",score>=100);
+
+  document.getElementById("waterCount").textContent=
+    "💧 水 "+todayHistory.filter(x=>x.type==="water").length+"杯";
+  document.getElementById("count").textContent=
+    todayHistory.filter(x=>x.type!=="water").length+"杯";
+
+  document.getElementById("buttons").innerHTML=drinks.map((d,i)=>
+    `<button onclick="addDrink(${i})">${d[0]}<br><span class="small">＋${d[1]}点</span></button>`
+  ).join("");
+
+  const historyBox=document.getElementById("history");
+  if(!state.history.length){
+    historyBox.innerHTML='<li class="small">まだ記録なし</li>';
+  }else{
+    const groups={};
+    state.history.forEach(x=>{
+      (groups[x.date] ||= []).push(x);
+    });
+    const dates=Object.keys(groups).sort((a,b)=>new Date(b)-new Date(a));
+
+    historyBox.innerHTML=dates.map(date=>{
+      const entries=groups[date].slice().reverse();
+      const total=dailyScore(date);
+      const rows=entries.map(x=>{
+        const sign=Number(x.points)>0?"+":"";
+        const time=x.time?` <span class="small">${x.time}</span>`:"";
+        return `<li><span>${x.name}${time}</span><b>${sign}${x.points}点</b></li>`;
+      }).join("");
+
+      return `
+        <li style="display:block;padding:14px 0 6px;border-bottom:0">
+          <div style="display:flex;justify-content:space-between;font-weight:800">
+            <span>📅 ${date}</span>
+            <span>${total}点</span>
+          </div>
+        </li>
+        ${rows}
+      `;
+    }).join("");
+  }
+
+  document.getElementById("settings").innerHTML=drinks.map((d,i)=>
+    `<div class="row"><span>${d[0]}</span><input type="number" min="0" value="${d[1]}" onchange="setPoint(${i},this.value)">点</div>`
+  ).join("");
+}
+
+function addDrink(i){
+  const d=drinks[i];
+  state.history.push({
+    date:todayKey(),
+    time:new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"}),
+    name:d[0],
+    points:Number(d[1]),
+    type:"drink"
+  });
+  save();
+  render();
+}
+
+function addWater(){
+  state.history.push({
+    date:todayKey(),
+    time:new Date().toLocaleTimeString("ja-JP",{hour:"2-digit",minute:"2-digit"}),
+    name:"水・炭酸水",
+    points:-5,
+    type:"water"
+  });
+  save();
+  render();
+}
+
+function resetDay(){
+  if(confirm("今日の記録だけをリセットしますか？\n過去の日の履歴は残ります。")){
+    state.history=state.history.filter(x=>x.date!==todayKey());
+    save();
+    render();
+  }
+}
+
+function clearAll(){
+  if(confirm("すべての履歴を削除しますか？")){
+    state.history=[];
+    save();
+    render();
+  }
+}
+
+function setPoint(i,v){
+  drinks[i][1]=Math.max(0,Number(v));
+  save();
+  render();
+}
+
+save();
+render();
+</script>
+</body>
+</html>
